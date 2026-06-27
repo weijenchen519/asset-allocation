@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美股資產配置效率前緣分析儀表板</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (xlsx parser) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <!-- App Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- 頂部導覽 -->
+    <header class="bg-slate-950 border-b border-slate-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-emerald-600 text-white p-2 rounded-lg shadow-lg shadow-emerald-900/30">
+                        <i class="fa-solid fa-chart-line text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-lg font-bold text-white tracking-tight block">FrontierQuant</span>
+                        <span class="text-[10px] text-slate-400 block -mt-1">馬可維茲效率前緣模擬系統</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-xs text-slate-400 hidden sm:inline bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>
+                        蒙地卡羅引擎已就緒
+                    </span>
+                    <button id="saveDataBtn" onclick="saveCurrentData()" class="text-xs bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg border border-emerald-600 transition duration-150">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i> 儲存資料
+                    </button>
+                    <span id="saveStatusText" class="hidden text-[10px] text-emerald-400 whitespace-nowrap"></span>
+                    <button onclick="resetToDefaults()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition duration-150">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> 重設初始資產
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- 標題與說明 -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-white">美股投資組合效率前緣 (Efficient Frontier)</h1>
+                <p class="text-slate-400 mt-1 text-sm">輸入股票代號（支援 AI 自動聯網探測數據），透過蒙地卡羅法生成數千組隨機權重，尋找最優風險回報比配置。</p>
+            </div>
+
+            <!-- 快速參數設定 -->
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-wrap items-center gap-4">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400 block uppercase">投資總額 (USD)</label>
+                    <div class="relative rounded-md shadow-sm">
+                        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5">
+                            <span class="text-slate-500 text-xs">$</span>
+                        </div>
+                        <input type="number" id="investAmount" value="10000" min="100" step="1000" oninput="updateInvestmentAmount()" class="w-28 bg-slate-900 border border-slate-700 text-xs text-white rounded-md p-1 pl-6 focus:ring-1 focus:ring-emerald-500 focus:outline-none font-mono font-bold">
+                    </div>
+                </div>
+                <div class="h-8 w-[1px] bg-slate-800"></div>
+                <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400 block uppercase">無風險利率 (Rf)</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="range" id="riskFreeRate" min="0" max="8" value="4.5" step="0.1" oninput="updateRfValue()" class="w-20 sm:w-24 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        <span id="rfValue" class="text-xs font-bold text-emerald-400">4.5%</span>
+                    </div>
+                </div>
+                <div class="h-8 w-[1px] bg-slate-800"></div>
+                <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400 block uppercase">模擬次數 (次)</label>
+                    <select id="simCount" class="bg-slate-900 border border-slate-700 text-xs text-white rounded-md p-1 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                        <option value="1000">1,000 次 (極速)</option>
+                        <option value="2500" selected>2,500 次 (推薦)</option>
+                        <option value="5000">5,000 次 (精準)</option>
+                    </select>
+                </div>
+                <div class="flex flex-col items-stretch gap-1">
+                    <button id="runSimBtn" onclick="runSimulation()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-emerald-950/50 transition duration-150">
+                        <i class="fa-solid fa-play mr-1.5"></i> 開始計算
+                    </button>
+                    <div id="simProgressWrap" class="hidden w-full">
+                        <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div id="simProgressBar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-100" style="width:0%"></div>
+                        </div>
+                        <div id="simProgressText" class="text-[10px] text-slate-500 text-center mt-0.5">模擬中…</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- 左側：資產參數編輯 -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                        <span class="font-bold text-sm text-white flex items-center">
+                            <i class="fa-solid fa-list-check text-emerald-500 mr-2"></i>投資組合資產清單 (1年期)
+                        </span>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="triggerXlsxImport()" class="text-xs text-sky-400 hover:text-sky-300 transition flex items-center bg-sky-950/40 px-2.5 py-1 rounded-md border border-sky-500/20">
+                                <i class="fa-solid fa-file-excel mr-1"></i> 從 Excel 匯入
+                            </button>
+                            <button onclick="openAddAssetModal()" class="text-xs text-emerald-400 hover:text-emerald-300 transition flex items-center bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                                <i class="fa-solid fa-plus mr-1"></i> 新增股票
+                            </button>
+                        </div>
+                        <input type="file" id="xlsxFileInput" accept=".xlsx,.xlsm" class="hidden" onchange="handleXlsxFile(event)">
+                    </div>
+
+                    <!-- 股票代號參數表格 -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead>
+                                <tr class="text-slate-400 border-b border-slate-800">
+                                    <th class="pb-2">股號</th>
+                                    <th class="pb-2">預期報酬率</th>
+                                    <th class="pb-2">年化波動度</th>
+                                    <th class="pb-2 text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assetTableBody" class="divide-y divide-slate-800/50">
+                                <!-- 動態載入 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                        <div class="font-bold text-slate-300"><i class="fa-solid fa-circle-info text-emerald-500 mr-1"></i>小秘訣：</div>
+                        <p>點擊「<strong>從 Excel 匯入</strong>」可直接從 .xlsx 檔案讀取股價數據，系統會自動計算報酬率、波動度與相關係數。新增工作表或新增資料列後重新匯入即可更新。</p>
+                    </div>
+                </div>
+
+                <!-- 日期範圍篩選 (隱藏直到匯入 Excel 後顯示) -->
+                <div id="dateRangePanel" class="hidden bg-slate-950 p-5 rounded-2xl border border-sky-500/20 shadow-xl space-y-3">
+                    <div class="flex items-center border-b border-slate-800 pb-3">
+                        <i class="fa-solid fa-calendar-range text-sky-400 mr-2"></i>
+                        <span class="font-bold text-sm text-white">歷史數據日期範圍</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">調整日期範圍，系統將依該區間重新計算報酬率、波動度與相關係數。</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] text-slate-400 uppercase font-semibold block mb-1">起始日期</label>
+                            <input type="date" id="dateStart" onchange="onDateRangeChange()"
+                                class="w-full bg-slate-900 border border-slate-700 text-white text-xs rounded-lg p-1.5 focus:outline-none focus:border-sky-500">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-slate-400 uppercase font-semibold block mb-1">結束日期</label>
+                            <input type="date" id="dateEnd" onchange="onDateRangeChange()"
+                                class="w-full bg-slate-900 border border-slate-700 text-white text-xs rounded-lg p-1.5 focus:outline-none focus:border-sky-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 最佳化權重分析比例 (Doughnut Chart) -->
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                        <span class="font-bold text-sm text-white flex items-center">
+                            <i class="fa-solid fa-pie-chart text-emerald-500 mr-2"></i>最佳配置權重與金額
+                        </span>
+                        <div class="flex space-x-1" id="portfolioTypeSelector">
+                            <button onclick="switchDoughnutData('maxSharpe')" id="btnSelectMaxSharpe" class="text-[10px] bg-emerald-600/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">最大夏普</button>
+                            <button onclick="switchDoughnutData('gmv')" id="btnSelectGmv" class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-800">最小波動</button>
+                        </div>
+                    </div>
+                    <div class="h-48 relative flex items-center justify-center">
+                        <canvas id="weightDoughnutChart"></canvas>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2" id="weightDetailList">
+                        <!-- 動態生成權重比例與實體金額文字 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側：資料視覺化 & 散點圖 -->
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- KPI 指標面板 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- 卡片 1: 最大夏普組合 -->
+                    <div class="bg-gradient-to-br from-slate-950 to-slate-900 p-5 rounded-2xl border border-amber-500/20 shadow-md relative overflow-hidden group">
+                        <div class="absolute -right-4 -bottom-4 text-amber-500/5 text-7xl font-extrabold group-hover:scale-110 transition-transform duration-300">
+                            <i class="fa-solid fa-crown"></i>
+                        </div>
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase block">🌟 最大夏普值組合 (Max Sharpe)</span>
+                                <div class="text-2xl font-black text-white" id="msSharpe">0.00</div>
+                                <p class="text-xs text-slate-400">預期年報酬: <span class="text-emerald-400 font-bold" id="msReturn">0.0%</span> | 年波動度: <span class="text-rose-400 font-bold" id="msVol">0.0%</span></p>
+                            </div>
+                            <div class="bg-amber-500/10 text-amber-400 p-2.5 rounded-xl border border-amber-500/20">
+                                <i class="fa-solid fa-trophy text-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 卡片 2: 全域最小波動組合 -->
+                    <div class="bg-gradient-to-br from-slate-950 to-slate-900 p-5 rounded-2xl border border-emerald-500/20 shadow-md relative overflow-hidden group">
+                        <div class="absolute -right-4 -bottom-4 text-emerald-500/5 text-7xl font-extrabold group-hover:scale-110 transition-transform duration-300">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold text-emerald-400 tracking-wider uppercase block">🟢 全域最小波動組合 (GMV)</span>
+                                <div class="text-2xl font-black text-white" id="gmvVol">0.0%</div>
+                                <p class="text-xs text-slate-400">預期年報酬: <span class="text-emerald-400 font-bold" id="gmvReturn">0.0%</span> | 夏普值: <span class="text-amber-400 font-bold" id="gmvSharpe">0.00</span></p>
+                            </div>
+                            <div class="bg-emerald-500/10 text-emerald-400 p-2.5 rounded-xl border border-emerald-500/20">
+                                <i class="fa-solid fa-shield-heart text-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 效率前緣散佈圖 -->
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-chart-line mr-1.5 text-emerald-500"></i>馬可維茲效率前緣散點分佈圖</h3>
+                            <p class="text-[10px] text-slate-500">X 軸：年化波動度 (Risk) | Y 軸：預期報酬率 (Return)</p>
+                        </div>
+                        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">模擬散點</span>
+                    </div>
+                    <div class="h-96 relative">
+                        <canvas id="frontierScatterChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 投資組合最佳化數據一覽表 -->
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl">
+                    <h3 class="text-sm font-bold text-white mb-4 flex items-center">
+                        <i class="fa-solid fa-table-list text-emerald-500 mr-2"></i>配置比例、金額與績效對比表格
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="text-slate-400 border-b border-slate-800">
+                                    <th class="pb-3 pl-2">資產組合類型</th>
+                                    <th class="pb-3">預期年回報率</th>
+                                    <th class="pb-3">年化波動度</th>
+                                    <th class="pb-3">夏普比率 (Sharpe)</th>
+                                    <th class="pb-3 text-right pr-2">最佳配置詳情 (代號: 比例 / 金額)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/50" id="comparisonTableBody">
+                                <!-- 動態渲染 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 相關係數熱力圖 (Correlation Heatmap) -->
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center">
+                                <i class="fa-solid fa-border-all text-emerald-500 mr-2"></i>資產相關係數熱力圖 (Correlation Heatmap)
+                            </h3>
+                            <p class="text-[10px] text-slate-500">紅色 = 高正相關 (+1.0) | 白色 = 無相關 (0.0) | 藍色 = 負相關 (-1.0)</p>
+                        </div>
+                        <span class="text-[10px] bg-slate-900 px-2.5 py-1 rounded text-emerald-400 border border-slate-800 font-mono">Pearson corr.</span>
+                    </div>
+                    <div class="overflow-x-auto" id="correlationHeatmap">
+                        <!-- 動態生成相關係數熱力圖 -->
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- 現代投資理論 MPT 科普白話介紹區 -->
+        <div class="bg-slate-950 p-8 rounded-2xl border border-slate-800 shadow-xl space-y-6">
+            <div class="border-b border-slate-800 pb-4">
+                <span class="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase border border-emerald-500/20 tracking-wider">Nobel Prize in Economics</span>
+                <h2 class="text-xl font-extrabold text-white flex items-center mt-2">
+                    <i class="fa-solid fa-graduation-cap text-emerald-500 mr-2.5"></i>哈利·馬可維茲 現代投資組合科學 (MPT) —— 白話核心精神
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">
+                    用最科學的方法幫你「降低投資風險」，不用複雜的公式，我們用三個最直覺的理財觀念來拆解它。
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- 卡片 1: 分散風險的魔術 -->
+                <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-6 hover:border-indigo-500/30 transition duration-300 flex flex-col justify-between space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-indigo-400 tracking-wider uppercase">核心觀念一 / 雞蛋與籃子</span>
+                            <span class="bg-indigo-500/10 text-indigo-400 p-1.5 rounded-lg"><i class="fa-solid fa-basket-shopping text-xs"></i></span>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-200 mb-2">分散風險的數學魔術</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            大家都聽過「不要把雞蛋放在同一個籃子裡」。但馬可維茲更進一步指出：<strong>籃子之間最好毫無關係，甚至是反向變動的</strong>。
+                        </p>
+                    </div>
+                    <div class="bg-slate-950/60 p-4 rounded-lg border border-slate-850 text-xs text-slate-300 space-y-2">
+                        <p class="font-bold text-indigo-300">💡 舉個例子：</p>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">
+                            如果你同時投資「雨傘店」和「防曬乳店」，雨天時雨傘大賣，晴天時防曬乳熱銷。這兩家店的波動會互補，讓你不管晴天雨天都有穩定收入，這就是<strong>「負相關資產」消弭風險</strong>的奧秘。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 卡片 2: 什麼是效率前緣 -->
+                <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-6 hover:border-emerald-500/30 transition duration-300 flex flex-col justify-between space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-emerald-400 tracking-wider uppercase">核心觀念二 / 理性邊界</span>
+                            <span class="bg-emerald-500/10 text-emerald-400 p-1.5 rounded-lg"><i class="fa-solid fa-road text-xs"></i></span>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-200 mb-2">效率前緣 (Efficient Frontier)</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            把成千上萬種股票比例混合後，畫在圖表上，就會形成一整片散點星空。這片星空<strong>最左上角的那道弧線邊界</strong>，就是「效率前緣」。
+                        </p>
+                    </div>
+                    <div class="bg-slate-950/60 p-4 rounded-lg border border-slate-850 text-xs text-slate-300 space-y-2">
+                        <p class="font-bold text-emerald-300">🚗 高速公路比喻：</p>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">
+                            效率前緣就像是車速最快、油耗最省的完美平衡車道。在這條線上，<strong>你不可能在不增加風險的情況下，多賺一毛錢</strong>；也<strong>不可能在不降低報酬的前提下，少承擔一絲風險</strong>。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 卡片 3: 夏普比率白話文 -->
+                <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-6 hover:border-amber-500/30 transition duration-300 flex flex-col justify-between space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-amber-400 tracking-wider uppercase">核心觀念三 / CP值指標</span>
+                            <span class="bg-amber-500/10 text-amber-400 p-1.5 rounded-lg"><i class="fa-solid fa-scale-balanced text-xs"></i></span>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-200 mb-2">夏普比率 (Sharpe Ratio)</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            夏普值就是投資界的「CP值 (性價比) 測量器」。它幫你評估：你為了多賺點錢，每天睡不著覺（承受波動風險）到底值不值得。
+                        </p>
+                    </div>
+                    <div class="bg-slate-950/60 p-4 rounded-lg border border-slate-850 text-xs text-slate-300 space-y-2">
+                        <p class="font-bold text-amber-300">⚖️ CP值如何看：</p>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">
+                            扣除無風險定存利息後，<strong>夏普值越高，代表每一分你冒著的心跳風險，能換回更多的超額報酬</strong>。圖表上的「黃星點」就是整個星空中性價比最高的黃金投資組合。
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex items-start space-x-3 text-xs text-slate-400">
+                <i class="fa-solid fa-lightbulb text-amber-500 text-base mt-0.5"></i>
+                <p class="leading-relaxed">
+                    <strong>一言以蔽之：</strong> 現代投資理論的目的，並不是教你如何尋找會漲十倍的「飆股」，而是教你如何像個頂級調酒師一樣，透過聰明的調配比例，<strong>將高風險個股調和成一杯「風險極低、預期回報卻很豐厚」的完美雞尾酒</strong>。
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="bg-slate-950 text-slate-500 py-8 border-t border-slate-800 mt-12 text-center text-xs space-y-2">
+        <p>本系統之模擬結果僅供學術研究與資產配置科普教學參考，不構成任何實際市場交易投資之依據。</p>
+        <p>© 2026 FrontierQuant Analytics. 繁體中文本地化版</p>
+    </footer>
+
+    <!-- 新增資產 Modal 彈出視窗 -->
+    <div id="addAssetModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-slate-800 max-w-sm w-full p-6 rounded-2xl space-y-4 shadow-2xl relative">
+            <h3 class="text-base font-bold text-white flex items-center">
+                <i class="fa-solid fa-plus-circle text-emerald-500 mr-2"></i>手動新增美股資產
+            </h3>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">美股代號 (Ticker)</label>
+                    <input type="text" id="modalTicker" placeholder="例如: MSFT" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white placeholder-slate-600 uppercase focus:outline-none focus:border-emerald-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">預期年報酬率 (%)</label>
+                    <input type="number" step="0.1" id="modalReturn" placeholder="例如: 18.5" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">年化預期波動度 (%)</label>
+                    <input type="number" step="0.1" id="modalVol" placeholder="例如: 25.0" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <p class="text-[10px] text-slate-500">手動新增的股票與其他股票的相關係數預設為 0.35。建議優先使用「從 Excel 匯入」以取得真實相關係數。</p>
+            </div>
+
+            <div id="modalError" class="hidden text-rose-400 text-xs bg-rose-950/40 p-2.5 rounded border border-rose-800/50 font-medium flex items-center space-x-1.5">
+                <i class="fa-solid fa-circle-exclamation text-rose-500"></i>
+                <span id="modalErrorText"></span>
+            </div>
+
+            <div class="flex justify-end space-x-2 text-xs pt-2">
+                <button onclick="closeModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg">取消</button>
+                <button onclick="submitNewAsset()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold">確認新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
