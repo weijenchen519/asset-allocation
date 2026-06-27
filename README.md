@@ -46,8 +46,7 @@ Excel 檔案格式規範
 ---
 如何執行
 不需要安裝任何軟體，只要有瀏覽器就可以用。
-對 `index.html` 點兩下
-瀏覽器自動開啟，看到儀表板介面即代表成功
+對點開此網址(https://weijenchen519.github.io/asset-allocation/)即可開啟
 > 建議使用 **Google Chrome** 或 **Microsoft Edge**，效果最佳。
 ---
 操作步驟
