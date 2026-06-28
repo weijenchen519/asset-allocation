@@ -53,7 +53,7 @@ Format B（舊版逐股工作表格式）：每張工作表代表一檔股票，
 6. MPT 科普教學區:
 頁面下方附有現代投資組合理論的白話文教學，以「雞蛋與籃子」「高速公路比喻」「CP值指標」三個比喻說明分散風險、效率前緣與夏普比率的核心概念。
 ---
-🔧 抓股價.xlsm（資料來源工具）
+🔧 抓股價.xlsm（資料來源工具):
 一個 Excel VBA 工具，用於批次抓取美股／台股歷史股價，輸出符合本儀表板「Format A」匯入格式的報表。
 透過 `MSXML2.XMLHTTP` 呼叫 Yahoo Finance 非官方 Chart API：
 `https://query1.finance.yahoo.com/v8/finance/chart/`
